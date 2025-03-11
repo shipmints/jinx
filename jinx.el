@@ -600,8 +600,10 @@ If CHECK is non-nil, always check first."
   (unless (fboundp #'jinx--mod-dict)
     (unless module-file-suffix
       (error "Jinx: Dynamic modules are not supported"))
-    (let* ((mod-name (file-name-with-extension "jinx-mod" module-file-suffix))
-           (mod-file (locate-library mod-name t)))
+    (let* ((arch (car (split-string system-configuration "-")))
+           (mod-name "jinx-mod")
+           (mod-obj-name (file-name-with-extension (concat mod-name "-" arch) module-file-suffix))
+           (mod-file (locate-library mod-obj-name t)))
       (unless mod-file
         (let* ((cc (or (getenv "CC")
                        (seq-find #'executable-find '("gcc" "clang" "cc"))
@@ -611,11 +613,12 @@ If CHECK is non-nil, always check first."
                                    (or (locate-library c-name t)
                                        (error "Jinx: %s not found" c-name))))
                (command
-                `(,cc ,@jinx--compile-flags "-o" ,mod-name ,c-name
-                  ,@(split-string-and-unquote
-                     (condition-case nil
-                         (car (process-lines "pkg-config" "--cflags" "--libs" "enchant-2"))
-                       (error "-I/usr/include/enchant-2 -I/usr/local/include/enchant-2 -L/usr/local/lib -lenchant-2"))))))
+                `(,cc ,@jinx--compile-flags
+                      "-o" ,mod-obj-name ,c-name
+                      ,@(split-string-and-unquote
+                         (condition-case nil
+                             (car (process-lines "pkg-config" "--cflags" "--libs" "enchant-2"))
+                           (error "-I/usr/include/enchant-2 -I/usr/local/include/enchant-2 -L/usr/local/lib -lenchant-2"))))))
           (with-current-buffer (get-buffer-create "*jinx module compilation*")
             (let ((inhibit-read-only t))
               (erase-buffer)
@@ -627,7 +630,7 @@ If CHECK is non-nil, always check first."
                   (insert msg)
                   (pop-to-buffer (current-buffer))
                   (error msg)))))
-          (setq mod-file (expand-file-name mod-name))))
+          (setq mod-file (expand-file-name mod-obj-name))))
       ;; Initialize Mac spell checker to avoid dead lock (gh:minad/jinx#91).
       (when (and (eq window-system 'mac) (fboundp 'mac-do-applescript))
         (mac-do-applescript
